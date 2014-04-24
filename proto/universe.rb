@@ -26,7 +26,7 @@ class Node
 
   def child_at(x,y)
     new_seed = crc32(@seed, x, y)
-    if Random.new(new_seed).rand(10) < 11
+    if Random.new(new_seed).rand(10) < 5
       @children[x][y] ||= build_child(new_seed, x, y)
     else
       nil
@@ -163,6 +163,7 @@ class MyGame < Gosu::Window
         end
       end
     end
+    puts "NO PLANETS!" if @planets.empty?
   end
 
   def draw
