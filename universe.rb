@@ -89,6 +89,7 @@ class PlanetNode < Node
 
     sea_level = samples.inject(&:+)/samples.size - 0.1
     mountain_height = sea_level + rand(0.5..0.9)
+    snow_height = mountain_height + rand(0.2..0.4)
     puts "sea level: #{sea_level}"
     puts "mountain level: #{mountain_height}"
 
@@ -96,14 +97,17 @@ class PlanetNode < Node
     width.times do |x|
       height.times do |y|
         sample = terrain[x][y]
-        type = if sample > mountain_height
+        type = 
+        if sample > snow_height
+          :snow
+        elsif sample > mountain_height
           :mountain
         elsif sample > sea_level
           :grass
         else
           :water
         end
-        @terrain[x][y] = type
+        @terrain[x][y] = [type, sample]
       end
     end
     puts "min: #{min} max: #{max}"
@@ -178,8 +182,10 @@ class MyGame < Gosu::Window
         y = py*PLANET_CELL_HEIGHT
         # a = planet.terrain[px][py] * 155 + 100
         # c = Gosu::Color.rgba(a,a,a,255)
-        terrain_type = planet.terrain[px][py] 
+        terrain_type, value = planet.terrain[px][py] 
         c = lookup_color(terrain_type)
+        # c = Gosu::Color.rgba(c.red,c.green,c.blue,255)
+        c.alpha = (value * 175 + 80)
         draw_quad(x, y, c, 
                   x+PLANET_CELL_WIDTH, y, c, 
                   x+PLANET_CELL_WIDTH, y+PLANET_CELL_HEIGHT, c, 
@@ -196,6 +202,8 @@ class MyGame < Gosu::Window
       Gosu::Color::GREEN
     when :mountain
       Gosu::Color::GRAY
+    when :snow
+      Gosu::Color::WHITE
     end
   end
 
