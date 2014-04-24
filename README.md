@@ -1,4 +1,4 @@
-hinas_journey
+Hina's Journey
 =============
 
 Procedural universe space exploration game (prototype).
