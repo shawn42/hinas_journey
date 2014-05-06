@@ -1,0 +1,13 @@
+pkg
+*.swp
+*.swo
+*.log
+proto/cache
+.DS_Store
+.yardoc
+tags
+ctags
+.bundle
+*.lock
+vendor
+image.info

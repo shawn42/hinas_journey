@@ -1,7 +1,10 @@
 require 'perlin'
 require 'gosu'
 require 'zlib'
+require 'fileutils'
+require_relative './monster_id'
 
+MONSTER_CACHE_DIR = "cache/monsters"
 def crc32(*stuff)
   Zlib::crc32(stuff.join)
 end
@@ -68,6 +71,14 @@ class PlanetNode < Node
     @width = 100
     @height = 100
     generate_terrain
+    generate_monsters
+  end
+
+  def generate_monsters
+    @monster = MonsterId::Monster.new @seed
+    FileUtils.mkdir_p(MONSTER_CACHE_DIR) unless File.exists?(MONSTER_CACHE_DIR)
+    monster_image = "#{MONSTER_CACHE_DIR}/m-#{@seed}.png"
+    @monster.save(monster_image) unless File.exists? monster_image
   end
 
   def generate_terrain
@@ -193,6 +204,8 @@ class MyGame < Gosu::Window
                   x, y+PLANET_CELL_HEIGHT, c, z = 0)
       end
     end
+    monster_image = Gosu::Image.new(self, "#{MONSTER_CACHE_DIR}/m-#{planet.seed}.png", false)
+    monster_image.draw(100, 100, 99)
   end
 
   def lookup_color(terrain_type)
