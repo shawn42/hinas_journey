@@ -135,8 +135,9 @@ class PlanetNode < Node
 end
 
 class MyGame < Gosu::Window
-  PLANET_CELL_WIDTH = 4
-  PLANET_CELL_HEIGHT = 4
+  SCALE = 0.5
+  PLANET_CELL_WIDTH = 32*SCALE
+  PLANET_CELL_HEIGHT = 32*SCALE
   SYSTEM_CELL_WIDTH = 80 * PLANET_CELL_WIDTH
   SYSTEM_CELL_HEIGHT = 80 * PLANET_CELL_HEIGHT
   def initialize(seed)
@@ -150,7 +151,9 @@ class MyGame < Gosu::Window
 
     generate_universe
 
+    # Gosu.enable_undocumented_retrofication
     @font = Gosu::Font.new self, "Arial", 30
+    @env_tiles = Gosu::Image.load_tiles(self, "environment.png", 32, 32, true)
   end
 
   def generate_universe
@@ -195,13 +198,15 @@ class MyGame < Gosu::Window
         # a = planet.terrain[px][py] * 155 + 100
         # c = Gosu::Color.rgba(a,a,a,255)
         terrain_type, value = planet.terrain[px][py] 
-        c = lookup_color(terrain_type)
-        # c = Gosu::Color.rgba(c.red,c.green,c.blue,255)
-        c.alpha = (value * 175 + 80)
-        draw_quad(x, y, c, 
-                  x+PLANET_CELL_WIDTH, y, c, 
-                  x+PLANET_CELL_WIDTH, y+PLANET_CELL_HEIGHT, c, 
-                  x, y+PLANET_CELL_HEIGHT, c, z = 0)
+        tile_index = lookup_tile_index(terrain_type)
+        # c = lookup_color(terrain_type)
+        # c.alpha = (value * 175 + 80)
+        # draw_quad(x, y, c, 
+        #           x+PLANET_CELL_WIDTH, y, c, 
+        #           x+PLANET_CELL_WIDTH, y+PLANET_CELL_HEIGHT, c, 
+        #           x, y+PLANET_CELL_HEIGHT, c, z = 0)
+        # @env_tiles[tile_index].draw(x,y,0,SCALE,SCALE)
+        @env_tiles[tile_index].draw(x,y,0,SCALE,SCALE)
       end
     end
     monster_image = Gosu::Image.new(self, "#{MONSTER_CACHE_DIR}/m-#{planet.seed}.png", false)
@@ -218,6 +223,19 @@ class MyGame < Gosu::Window
       Gosu::Color::GRAY
     when :snow
       Gosu::Color::WHITE
+    end
+  end
+
+  def lookup_tile_index(terrain_type)
+    case terrain_type
+    when :water
+      114
+    when :grass
+      70
+    when :mountain
+      96
+    when :snow
+      149
     end
   end
 
