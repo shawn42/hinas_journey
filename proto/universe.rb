@@ -66,10 +66,10 @@ class PlanetNode < Node
 
     persistence = 0.25
     octave = 1
-    @noise = Perlin::Generator.new @seed, persistence, octave
-    @noise.classic = true
-    @width = 100
-    @height = 100
+    @noise_generator = Perlin::Generator.new @seed, persistence, octave
+    @noise_generator.classic = true
+    @width = 200
+    @height = 200
     generate_terrain
     generate_monsters
   end
@@ -83,31 +83,21 @@ class PlanetNode < Node
 
   def generate_terrain
     terrain = Hash.new{|h,k| h[k] = {}}
-    min = 2
-    max = -2 
-    samples = []
-    noise = @noise.chunk2d(0,0,width,height,0.05)
-    width.times do |x|
-      height.times do |y|
-        # sample = @noise.run2d x*0.02, y*0.02
-        sample = noise[x][y]
-        max = sample if sample > max
-        min = sample if sample < min
-        samples << sample
-        terrain[x][y] = sample
-      end
-    end
+    noise = @noise_generator.chunk2d(0,0,width,height,0.05)
+    samples = noise.flatten
+    min = samples.min
+    max = samples.max
+    range = max - min
 
-    sea_level = samples.inject(&:+)/samples.size - 0.1
-    mountain_height = sea_level + rand(0.5..0.9)
-    snow_height = mountain_height + rand(0.2..0.4)
-    puts "sea level: #{sea_level}"
-    puts "mountain level: #{mountain_height}"
+    deep_sea_level = min + range * 0.3
+    sea_level = deep_sea_level + range * 0.2
+    mountain_height = sea_level + range * 0.3
+    snow_height = mountain_height + range * 0.1
 
     @terrain = Hash.new{|h,k| h[k] = {}}
     width.times do |x|
       height.times do |y|
-        sample = terrain[x][y]
+        sample = noise[x][y]
         type = 
         if sample > snow_height
           :snow
@@ -115,13 +105,14 @@ class PlanetNode < Node
           :mountain
         elsif sample > sea_level
           :grass
+        elsif sample > deep_sea_level
+          :shallow_water
         else
           :water
         end
         @terrain[x][y] = [type, sample]
       end
     end
-    puts "min: #{min} max: #{max}"
   end
 
   def print(depth=0)
@@ -135,7 +126,7 @@ class PlanetNode < Node
 end
 
 class MyGame < Gosu::Window
-  SCALE = 0.5
+  SCALE = 0.1
   PLANET_CELL_WIDTH = 32*SCALE
   PLANET_CELL_HEIGHT = 32*SCALE
   SYSTEM_CELL_WIDTH = 80 * PLANET_CELL_WIDTH
@@ -149,19 +140,27 @@ class MyGame < Gosu::Window
     @planets = []
     @planet_index = 0
 
+    @terrain_colors = {
+      water: Gosu::Color.rgba(0x3482DBCC),
+      shallow_water: Gosu::Color.rgba(0x3482DBFF),
+      grass: Gosu::Color.rgba(0xA2C341FF),
+      mountain: Gosu::Color.rgba(0xB6B7ABFF),
+      snow: Gosu::Color.rgba(0xDFE6F6FF),
+    }
+
     generate_universe
 
-    # Gosu.enable_undocumented_retrofication
+    Gosu.enable_undocumented_retrofication
     @font = Gosu::Font.new self, "Arial", 30
     @env_tiles = Gosu::Image.load_tiles(self, "environment.png", 32, 32, true)
   end
 
   def generate_universe
     @universe = UniverseNode.new(@seed)
-    5.times do |j|
+    4.times do |j|
       system = @universe.child_at(1,j)
       if system
-        5.times do |i|
+        4.times do |i|
           system.child_at(0,i)
         end
       end
@@ -186,47 +185,42 @@ class MyGame < Gosu::Window
   end
 
   def draw_planet(planet)
-    planet.width.times do |px|
-      planet.height.times do |py|
-        universe = planet.parent.parent
-        system = planet.parent
-        @font.draw "#{universe.name}", 450, 10, 1
-        @font.draw "[#{system.x},#{system.y}] #{system.name}", 450, 40, 1
-        @font.draw "[#{planet.x},#{planet.y}] #{planet.name}", 450, 70, 1
-        x = px*PLANET_CELL_WIDTH
-        y = py*PLANET_CELL_HEIGHT
-        # a = planet.terrain[px][py] * 155 + 100
-        # c = Gosu::Color.rgba(a,a,a,255)
-        terrain_type, value = planet.terrain[px][py] 
-        tile_index = lookup_tile_index(terrain_type)
-        # c = lookup_color(terrain_type)
-        # c.alpha = (value * 175 + 80)
-        # draw_quad(x, y, c, 
-        #           x+PLANET_CELL_WIDTH, y, c, 
-        #           x+PLANET_CELL_WIDTH, y+PLANET_CELL_HEIGHT, c, 
-        #           x, y+PLANET_CELL_HEIGHT, c, z = 0)
-        # @env_tiles[tile_index].draw(x,y,0,SCALE,SCALE)
-        @env_tiles[tile_index].draw(x,y,0,SCALE,SCALE)
+    @planet_terrain_cache ||= {}
+    @planet_terrain_cache[planet] ||= record(@width, @height) do
+      planet.width.times do |px|
+        planet.height.times do |py|
+          universe = planet.parent.parent
+          system = planet.parent
+          @font.draw "#{universe.name}", 450, 10, 1
+          @font.draw "[#{system.x},#{system.y}] #{system.name}", 450, 40, 1
+          @font.draw "[#{planet.x},#{planet.y}] #{planet.name}", 450, 70, 1
+          x = px*PLANET_CELL_WIDTH
+          y = py*PLANET_CELL_HEIGHT
+          # a = planet.terrain[px][py] * 155 + 100
+          # c = Gosu::Color.rgba(a,a,a,255)
+          terrain_type, value = planet.terrain[px][py] 
+          # tile_index = lookup_tile_index(terrain_type)
+          c = lookup_color(terrain_type)
+          # c.alpha = (value * 175 + 80)
+          draw_quad(x, y, c, 
+                    x+PLANET_CELL_WIDTH, y, c, 
+                    x+PLANET_CELL_WIDTH, y+PLANET_CELL_HEIGHT, c, 
+                    x, y+PLANET_CELL_HEIGHT, c, z = 0)
+          # @env_tiles[tile_index].draw(x,y,0,SCALE,SCALE)
+        end
       end
     end
+    @planet_terrain_cache[planet].draw(0, 0, 0)
     monster_image = Gosu::Image.new(self, "#{MONSTER_CACHE_DIR}/m-#{planet.seed}.png", false)
     monster_image.draw(100, 100, 99)
   end
 
   def lookup_color(terrain_type)
-    case terrain_type
-    when :water
-      Gosu::Color::BLUE 
-    when :grass
-      Gosu::Color::GREEN
-    when :mountain
-      Gosu::Color::GRAY
-    when :snow
-      Gosu::Color::WHITE
-    end
+    @terrain_colors[terrain_type]
   end
 
   def lookup_tile_index(terrain_type)
+    # TODO lookup map
     case terrain_type
     when :water
       114
