@@ -61,12 +61,6 @@ class World
     chunk_terrain = Hash.new{|h,k| h[k] = {}}
     @terrain[chunk_x][chunk_y] = chunk_terrain
 
-    # x = chunk_x*chunk_size
-    # y = chunk_y*chunk_size
-    # puts "generating #{x},#{y} => #{chunk_size},#{chunk_size}"
-    # noise = @noise_generator.chunk(x,y,chunk_size,chunk_size,chunk_size/400.0)#0.08)
-
-
     interval = 0.08 #chunk_size/600.0
     x = chunk_x*chunk_size*interval
     y = chunk_y*chunk_size*interval
@@ -86,28 +80,28 @@ class World
     width.times do |x|
       height.times do |y|
         sample = noise[x][y]
-        chunk_terrain[x][y] = 
-        if sample > snow_height
-          :snow
-        elsif sample > mountain_height
-          :mountain
-        elsif sample > grass_height
-          :grass
-        elsif sample > sea_level
-          :sand
-        elsif sample > deep_sea_level
-          :shallow_water
-        else
-          :water
-        end
+        chunk_terrain[x][y] =
+          if sample > snow_height
+            :snow
+          elsif sample > mountain_height
+            :mountain
+          elsif sample > grass_height
+            :grass
+          elsif sample > sea_level
+            :sand
+          elsif sample > deep_sea_level
+            :shallow_water
+          else
+            :water
+          end
       end
     end
   end
 end
 
 class MyGame < Gosu::Window
-  CELL_WIDTH = 8
-  CELL_HEIGHT = 8
+  CELL_WIDTH = 32
+  CELL_HEIGHT = 32
   def initialize(seed)
     @width = 800
     @height = 608
@@ -127,7 +121,15 @@ class MyGame < Gosu::Window
     @camera_color = Gosu::Color.rgba(0xFF0000FF)
 
     # @font = Gosu::Font.new self, "Arial", 30
-    # @env_tiles = Gosu::Image.load_tiles(self, "environment.png", 32, 32, true)
+    @env_tiles = Gosu::Image.load_tiles(self, "environment.png", 32, 32, true)
+    @typed_tiles = {
+      water:         @env_tiles[16*11+12],
+      shallow_water: @env_tiles[16*7 +3],
+      sand:          @env_tiles[16*11+13],
+      grass:         @env_tiles[16*7 +1],
+      mountain:      @env_tiles[16*6 +0],
+      snow:          @env_tiles[16*7 +0],
+    }
 
     generate_world seed
   end
@@ -178,12 +180,12 @@ class MyGame < Gosu::Window
                 x = px*CELL_WIDTH + chunk_x_off
                 y = py*CELL_HEIGHT + chunk_y_off
                 terrain_type = chunk_terrain[px][py] 
-                c = lookup_color(terrain_type)
-                draw_quad(x, y, c, 
-                          x+CELL_WIDTH, y, c, 
-                          x+CELL_WIDTH, y+CELL_HEIGHT, c, 
-                          x, y+CELL_HEIGHT, c, z = 0)
-                # @env_tiles[tile_index].draw(x,y,0,SCALE,SCALE)
+                # c = lookup_color(terrain_type)
+                # draw_quad(x, y, c, 
+                #           x+CELL_WIDTH, y, c, 
+                #           x+CELL_WIDTH, y+CELL_HEIGHT, c, 
+                #           x, y+CELL_HEIGHT, c, z = 0)
+                @typed_tiles[terrain_type].draw(x,y,0)
               end
             end
           end
@@ -207,6 +209,7 @@ class MyGame < Gosu::Window
 
   def button_down(id)
     exit if id == Gosu::KbEscape
+    camera_jump = 32
     if id == Gosu::KbLeft
       @world.octave -= 1
       regenerate_world
@@ -222,13 +225,13 @@ class MyGame < Gosu::Window
     elsif id == Gosu::KbSpace
       generate_world (rand*100_000).round
     elsif id == Gosu::KbH
-      @camera.x -= 10
+      @camera.x -= camera_jump
     elsif id == Gosu::KbL
-      @camera.x += 10
+      @camera.x += camera_jump
     elsif id == Gosu::KbJ
-      @camera.y += 10
+      @camera.y += camera_jump
     elsif id == Gosu::KbK
-      @camera.y -= 10
+      @camera.y -= camera_jump
     elsif id == Gosu::KbC
       puts "CAM: [#{@camera.x},#{@camera.y}]"
     end
