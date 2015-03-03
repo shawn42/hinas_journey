@@ -42,9 +42,8 @@ class World
     @height = chunk_size
     @chunk_size = chunk_size
 
-    @persistence = 0.25
-    @persistence = 1.34
-    @octave = 3
+    @persistence = 1.34 + 0.25
+    @octave = 1
     update_generator
 
     generate_chunk
@@ -64,7 +63,8 @@ class World
 
   def update_generator
     puts "new generator: seed: #{@seed}, persistence: #{@persistence}, octave: #{@octave}"
-    @noise_generator = Perlin::Generator.new @seed, @persistence, @octave, classic: true
+    @multiplier_noise_generator = Perlin::Generator.new @seed, @persistence, @octave, classic: true
+    @noise_generator = Perlin::Generator.new @seed, @persistence, @octave+2, classic: true
   end
 
   def has_chunk?(x,y)
@@ -98,11 +98,16 @@ class World
     y = chunk_y*chunk_size*interval
     puts "generating #{x},#{y} => #{chunk_size},#{chunk_size}"
     noise = @noise_generator.chunk(x,y,chunk_size,chunk_size,interval)#0.08)
+    multiplier_noise = @multiplier_noise_generator.chunk(x,y,chunk_size,chunk_size,interval)#0.08)
 
 
     puts "[#{chunk_x},#{chunk_y}] => noise row size: #{noise.size}x#{noise.first.size} vs chunksize: #{chunk_size}"
+    deep_sea_level = -0.7
+    sea_level = -0.3
+    grass_height = 0.2
+    mountain_height = 1.5
+    snow_height = 2
 
-    samples = noise.flatten
     deep_sea_level = -0.7
     sea_level = -0.3
     grass_height = 0.2
@@ -111,7 +116,8 @@ class World
 
     width.times do |x|
       height.times do |y|
-        sample = noise[x][y]
+        multiplier = [(multiplier_noise[x][y] + 1), 0].max / 2.5
+        sample = noise[x][y] * multiplier
         if sample > snow_height
           type = :snow
         elsif sample > mountain_height
@@ -208,7 +214,7 @@ class MyGame < Gosu::Window
   end
 
   def move_player
-    speed = 5
+    speed = 15
     @player.x -= speed if button_down?(KbA) && player_can_move?(-speed,0)
     @player.x += speed if button_down?(KbD) && player_can_move?(speed,0)
     @player.y -= speed if button_down?(KbW) && player_can_move?(0,-speed)
