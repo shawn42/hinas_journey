@@ -1,5 +1,8 @@
 require 'perlin'
 require 'gosu'
+require 'polaris'
+require 'two_d_grid_map'
+
 include Gosu
 CELL_SIZE = 32
 
@@ -132,7 +135,7 @@ class World
     interval = 0.08 #chunk_size/600.0
     x = (chunk_x*chunk_size*interval).round
     y = (chunk_y*chunk_size*interval).round
-    puts "generating #{x},#{y}"
+    puts "generating #{chunk_x},#{chunk_y}"
     noise = @noise_generator.chunk(x,y,chunk_size,chunk_size,interval)#0.08)
     multiplier_noise = @multiplier_noise_generator.chunk(x,y,chunk_size,chunk_size,interval)#0.08)
 
@@ -213,6 +216,10 @@ class World
       # hardcoded for now, width of 1
       gates = [[cx+4,cy-radius], [cx-radius, cy]] 
 
+      # @map = TwoDGridMap.new 10, 20
+      # @pather = Polaris.new @map
+      # @pather.guide(from,to).should be_nil
+
       # build walls
       (cx-radius..cx+radius).each do |x|
         [cy-radius,cy+radius].each do |y|
@@ -237,7 +244,6 @@ class World
 
       place_plaza rng, objects, cx, cy, radius
       place_huts rng, objects, cx, cy, radius
-
       place_town_hall rng, objects, cx, cy, radius
 
       # place barracks
