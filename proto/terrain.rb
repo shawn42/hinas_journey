@@ -1,5 +1,6 @@
 require 'perlin'
 require 'gosu'
+include Gosu
 CELL_SIZE = 32
 
 require 'zlib'
@@ -30,6 +31,27 @@ class Player
 end
 
 class Tree
+  def passable;false;end
+  def z;3;end
+  def color
+    @color ||= Color.rgba 11, 140, 82, 200
+  end
+end
+
+class Wall
+  def passable;false;end
+  def z;3;end
+  def color
+    @color ||= Color.rgba 97, 92, 84, 200
+  end
+end
+
+class Road
+  def passable;true;end
+  def z;1;end
+  def color
+    @color ||= Color.rgba 161, 131, 76, 200
+  end
 end
 
 class World
@@ -46,7 +68,7 @@ class World
     @octave = 1
     update_generator
 
-    generate_chunk
+    # generate_chunk
   end
 
   def persistence=(persistence)
@@ -79,6 +101,20 @@ class World
     chunk_hash[(x-chunk_x*chunk_size_in_pixels)/CELL_SIZE][(y-chunk_y*chunk_size_in_pixels)/CELL_SIZE]
   end
 
+  def chunk_for_world_coord(x,y)
+    chunk_x = x / CELL_SIZE / chunk_size
+    chunk_y = y / CELL_SIZE / chunk_size
+    [chunk_x, chunk_y]
+  end
+
+  def objects_for_world_coord(x,y)
+    chunk_x = x / CELL_SIZE / chunk_size
+    chunk_y = y / CELL_SIZE / chunk_size
+    chunk_size_in_pixels = CELL_SIZE * chunk_size
+    chunk_objs = @objects[chunk_x][chunk_y]
+    chunk_objs[(x-chunk_x*chunk_size_in_pixels)/CELL_SIZE][(y-chunk_y*chunk_size_in_pixels)/CELL_SIZE]
+  end
+
   def generate_chunk(chunk_x=0,chunk_y=0)
     local_seed = crc32(@seed, chunk_x, chunk_y)
     rng = Random.new local_seed
@@ -94,20 +130,13 @@ class World
     @objects[chunk_x][chunk_y] = chunk_objects
 
     interval = 0.08 #chunk_size/600.0
-    x = chunk_x*chunk_size*interval
-    y = chunk_y*chunk_size*interval
-    puts "generating #{x},#{y} => #{chunk_size},#{chunk_size}"
+    x = (chunk_x*chunk_size*interval).round
+    y = (chunk_y*chunk_size*interval).round
+    puts "generating #{x},#{y}"
     noise = @noise_generator.chunk(x,y,chunk_size,chunk_size,interval)#0.08)
     multiplier_noise = @multiplier_noise_generator.chunk(x,y,chunk_size,chunk_size,interval)#0.08)
 
-
-    puts "[#{chunk_x},#{chunk_y}] => noise row size: #{noise.size}x#{noise.first.size} vs chunksize: #{chunk_size}"
-    deep_sea_level = -0.7
-    sea_level = -0.3
-    grass_height = 0.2
-    mountain_height = 1.5
-    snow_height = 2
-
+    # puts "[#{chunk_x},#{chunk_y}] => noise row size: #{noise.size}x#{noise.first.size} vs chunksize: #{chunk_size}"
     deep_sea_level = -0.7
     sea_level = -0.3
     grass_height = 0.2
@@ -139,20 +168,192 @@ class World
         chunk_terrain[x][y] = type
       end
     end
+
+    # 20% chance to spawn town
+    # if(rng.rand(100) < 20)
+      generate_town(rng, chunk_terrain, chunk_objects, chunk_x, chunk_y)
+    # end
+  end
+
+  def largest_flat_space(terrain, opts)
+    cx,cy,max = opts.values_at :x, :y, :max
+    return 0 unless flat? terrain, cx, cy
+    max.times do |r|
+      (cx-r..cx+r).each do |x|
+        [cy-r,cy+r].each do |y|
+          return r-1 unless flat? terrain, x, y
+        end
+      end
+      (cy-r+1..cy+r-1).each do |y|
+        [cx-r,cx+r].each do |x|
+          return r-1 unless flat? terrain, x, y
+        end
+      end
+    end
+    max
+  end
+
+  FLAT_TERRAIN = [:sand, :grass]
+  def flat?(terrain, x, y)
+    FLAT_TERRAIN.include? terrain[x][y]
+  end
+
+  def generate_town(rng, terrain, objects, chunk_x, chunk_y)
+    cx = chunk_size / 2
+    cy = chunk_size / 2
+
+    largest_safe_radius = largest_flat_space(terrain, x:cx, y:cy, max:20)
+    # puts "generating town! safe radius: #{largest_safe_radius}"
+
+    if largest_safe_radius > 10
+      radius = rng.rand(10..largest_safe_radius)
+      puts "generating town with radius of #{radius} at [#{chunk_x}, #{chunk_y}]!"
+      
+      # pick gates
+      # hardcoded for now, width of 1
+      gates = [[cx+4,cy-radius], [cx-radius, cy]] 
+
+      # build walls
+      (cx-radius..cx+radius).each do |x|
+        [cy-radius,cy+radius].each do |y|
+          objects[x][y] ||= []
+          if gates.any?{|g|g[0]==x && g[1]==y}
+            objects[x][y] << Road.new 
+          else
+            objects[x][y] << Wall.new 
+          end
+        end
+      end
+      (cy-radius+1..cy+radius-1).each do |y|
+        [cx-radius,cx+radius].each do |x|
+          objects[x][y] ||= []
+          if gates.any?{|g|g[0]==x && g[1]==y}
+            objects[x][y] << Road.new 
+          else
+            objects[x][y] << Wall.new 
+          end
+        end
+      end
+
+      place_plaza rng, objects, cx, cy, radius
+      place_huts rng, objects, cx, cy, radius
+
+      place_town_hall rng, objects, cx, cy, radius
+
+      # place barracks
+
+      # place roads
+        # buildings need to be tracked to have cx,cy,traffic
+        # bring in A*
+        # from highest traffic to lowest
+          # A* from building to all other lower buildings, roads have a cost of zero
+    end
+  end
+
+  def place_town_hall(rng, objects, cx, cy, radius)
+    try_count = 0
+    town_hall_placed = false
+    until town_hall_placed || try_count > RETRY_MAX
+      hut_w = rng.rand(3..6)
+      hut_h = rng.rand(3..6)
+      town_hall_placed = place_building(rng, objects, cx, cy, radius, hut_w, hut_h)
+      try_count += 1
+    end
+  end
+
+  def place_plaza(rng, objects, cx, cy, radius)
+    plaza_cx = cx + rng.rand(-5..5)
+    plaza_cy = cy + rng.rand(-5..5)
+    plaza_w = rng.rand(radius/5..radius/2)
+    plaza_h = rng.rand(radius/5..radius/2)
+    plaza_x = plaza_cx-plaza_w/2
+    plaza_y = plaza_cy-plaza_h/2
+    (plaza_x..plaza_x+plaza_w).each do |x|
+      (plaza_y..plaza_y+plaza_h).each do |y|
+        objects[x][y] ||= []
+        objects[x][y] << Road.new
+      end
+    end
+
+  end
+
+  RETRY_MAX = 14
+  def place_huts(rng, objects, cx, cy, radius)
+    num_huts = rng.rand(1..radius/3)
+    hut_count = 0
+    retry_count = 0
+    while hut_count < num_huts && retry_count < RETRY_MAX
+      retry_count += 1
+      hut_w = rng.rand(1..2)
+      hut_h = rng.rand(1..2)
+      if place_building rng, objects, cx, cy, radius, hut_w, hut_h
+        hut_count += 1
+      end
+    end
+  end
+
+  def place_building(rng, objects, cx, cy, radius, hut_w, hut_h)
+    # TODO track buildings for population values / doors
+
+    hut_cx = rng.rand(cx-radius+2+hut_w..cx+radius-2-hut_w)
+    hut_cy = rng.rand(cy-radius+2+hut_h..cy+radius-2-hut_h)
+    hut_x = hut_cx-hut_w
+    hut_y = hut_cy-hut_h
+    hut_fits = room_for_building?(objects, hut_cx-hut_w, hut_cy-hut_h, hut_w*2+1, hut_h*2+1)
+
+    if hut_fits
+      doors = [[hut_cx,hut_cy-hut_h]] 
+      (hut_cx-hut_w..hut_cx+hut_w).each do |x|
+        [hut_cy-hut_h,hut_cy+hut_h].each do |y|
+          objects[x][y] ||= []
+          if doors.any?{|g|g[0]==x && g[1]==y}
+            objects[x][y] << Road.new 
+          else
+            objects[x][y] << Wall.new 
+          end
+        end
+      end
+      (hut_cy-hut_h+1..hut_cy+hut_h-1).each do |y|
+        [hut_cx-hut_w,hut_cx+hut_w].each do |x|
+          objects[x][y] ||= []
+          if doors.any?{|g|g[0]==x && g[1]==y}
+            objects[x][y] << Road.new 
+          else
+            objects[x][y] << Wall.new 
+          end
+        end
+      end
+    end
+    hut_fits
+  end
+
+  def room_for_building?(objects, x, y, w, h)
+    # building need 1 cell of padding around them
+    (x-1..x+w+1).each do |x|
+      (y-1..y+h+1).each do |y|
+        return false if objects[x][y] && !objects[x][y].empty?
+      end
+    end
+    true
   end
 end
 
 class MyGame < Gosu::Window
-  include Gosu
   def initialize(seed)
     @width = 800
     @height = 608
     super @width, @height, false
     Gosu.enable_undocumented_retrofication
 
-    @player = Player.new @width / 2, @height / 2
+    initial_x = @width / 2
+    initial_y = @height / 2
 
-    @camera = Camera.new @width / 2, @height / 2
+    initial_x = 5 * 50 * 32
+    initial_y = -23 * 50 * 32
+
+    @player = Player.new initial_x, initial_y
+
+    @camera = Camera.new @player.x, @player.y
 
 
     @terrain_colors = {
@@ -165,7 +366,7 @@ class MyGame < Gosu::Window
     }
     @camera_color = Color.rgba(0xFF0000FF)
 
-    # @font = Font.new self, "Arial", 30
+    @font = Font.new self, "Arial", 30
     @env_tiles = Image.load_tiles(self, "environment.png", 32, 32, true)
     @hero_tiles = Image.load_tiles(self, "heroes.png", -16, -1, true)
     @hero = @hero_tiles.first
@@ -180,6 +381,7 @@ class MyGame < Gosu::Window
 
     generate_world seed
 
+    update
     until player_position_valid?
       @player.x += CELL_SIZE
       update
@@ -225,20 +427,25 @@ class MyGame < Gosu::Window
   def player_can_move?(x_delta, y_delta)
     # return true if BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x,@player.y))
     if x_delta < 0
-      !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x-8+x_delta,@player.y-8)) &&
-        !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x-8+x_delta,@player.y+8))
+      passable?(@player.x-8+x_delta,@player.y-8) &&
+        passable?(@player.x-8+x_delta,@player.y+8)
     elsif x_delta > 0
-      !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x+8+x_delta,@player.y-8)) &&
-        !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x+8+x_delta,@player.y+8))
+      passable?(@player.x+8+x_delta,@player.y-8) &&
+        passable?(@player.x+8+x_delta,@player.y+8)
     else
       if y_delta < 0
-        !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x-8, @player.y-8+y_delta)) &&
-          !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x+8, @player.y-8+y_delta))
+        passable?(@player.x-8, @player.y-8+y_delta) &&
+          passable?(@player.x+8, @player.y-8+y_delta)
       elsif y_delta > 0
-        !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x-8, @player.y+8+y_delta)) &&
-          !BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x+8, @player.y+8+y_delta))
+        passable?(@player.x-8, @player.y+8+y_delta) &&
+          passable?(@player.x+8, @player.y+8+y_delta)
       end
     end
+  end
+
+  def passable?(x, y)
+    objects = @world.objects_for_world_coord(x,y)
+    !BLOCK_TILES.include?(@world.tile_for_world_coord(x, y)) && (objects.nil? || objects.all?(&:passable))
   end
 
   def generate_new_chunks(chunk_x, chunk_y)
@@ -298,21 +505,17 @@ class MyGame < Gosu::Window
                 x = px*CELL_SIZE + chunk_x_off
                 y = py*CELL_SIZE + chunk_y_off
                 terrain_type = chunk_terrain[px][py] 
-                # c = lookup_color(terrain_type)
-                # draw_quad(x, y, c, 
-                #           x+CELL_SIZE, y, c, 
-                #           x+CELL_SIZE, y+CELL_SIZE, c, 
-                #           x, y+CELL_SIZE, c, z = 0)
                 @typed_tiles[terrain_type].draw(x,y,0)
                 objects = chunk_objects[px][py] 
                 if objects
-                  objects.each do |obj|
+                  objects.each.with_index do |obj, i|
                   
-                    c = Color::GREEN
-                    draw_quad(x, y, c, 
-                              x+10, y, c, 
-                              x+10, y+10, c, 
-                              x, y+10, c, z = 3)
+                    c = obj.color
+                    size = 31-i
+                    draw_quad(x+i+1, y+i+1, c, 
+                              x+size, y+i+1, c, 
+                              x+size, y+size, c, 
+                              x+i+1, y+size, c, obj.z)
                   end
                 end
 
@@ -322,17 +525,17 @@ class MyGame < Gosu::Window
           end
         end
       end
-      x = @camera.x
-      y = @camera.y
-      c = @camera_color
-      draw_quad(x, y, c,
-                x+1, y, c, 
-                x+1, y+1, c, 
-                x, y+1, c, z = 2)
-      @hero.draw_rot(@player.x,@player.y,1,0)
+      # x = @camera.x
+      # y = @camera.y
+      # c = @camera_color
+      # draw_quad(x, y, c,
+      #           x+1, y, c, 
+      #           x+1, y+1, c, 
+      #           x, y+1, c, z = 2)
+      @hero.draw_rot(@player.x,@player.y,2,0)
     end
-    # end
-    # @terrain_cache.draw(0, 0, 0)
+
+    @font.draw "#{@world.chunk_for_world_coord(@player.x, @player.y)}", 10, 10, 99
   end
 
   def lookup_color(terrain_type)
