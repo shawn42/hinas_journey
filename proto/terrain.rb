@@ -1,7 +1,8 @@
 require 'perlin'
 require 'gosu'
 require 'polaris'
-require 'two_d_grid_map'
+require_relative 'things'
+require_relative 'city_planner_map'
 
 include Gosu
 CELL_SIZE = 32
@@ -9,52 +10,6 @@ CELL_SIZE = 32
 require 'zlib'
 def crc32(*stuff)
   Zlib::crc32(stuff.join)
-end
-
-class Numeric
-  def percent
-    self / 100.0
-  end
-end
-
-class Camera
-  attr_accessor :x, :y
-  def initialize(x,y)
-    @x = x
-    @y = y
-  end
-end
-
-class Player
-  attr_accessor :x, :y
-  def initialize(x,y)
-    @x = x
-    @y = y
-  end
-end
-
-class Tree
-  def passable;false;end
-  def z;3;end
-  def color
-    @color ||= Color.rgba 11, 140, 82, 200
-  end
-end
-
-class Wall
-  def passable;false;end
-  def z;3;end
-  def color
-    @color ||= Color.rgba 97, 92, 84, 200
-  end
-end
-
-class Road
-  def passable;true;end
-  def z;1;end
-  def color
-    @color ||= Color.rgba 161, 131, 76, 200
-  end
 end
 
 class World
@@ -214,19 +169,13 @@ class World
       
       # pick gates
       # hardcoded for now, width of 1
-      gates = [[cx+4,cy-radius], [cx-radius, cy]] 
-
-      # @map = TwoDGridMap.new 10, 20
-      # @pather = Polaris.new @map
-      # @pather.guide(from,to).should be_nil
+      gates = [[cx+4,cy-radius,1], [cx-radius, cy,1]] 
 
       # build walls
       (cx-radius..cx+radius).each do |x|
         [cy-radius,cy+radius].each do |y|
           objects[x][y] ||= []
-          if gates.any?{|g|g[0]==x && g[1]==y}
-            objects[x][y] << Road.new 
-          else
+          unless gates.any?{|g|g[0]==x && g[1]==y}
             objects[x][y] << Wall.new 
           end
         end
@@ -234,21 +183,33 @@ class World
       (cy-radius+1..cy+radius-1).each do |y|
         [cx-radius,cx+radius].each do |x|
           objects[x][y] ||= []
-          if gates.any?{|g|g[0]==x && g[1]==y}
-            objects[x][y] << Road.new 
-          else
+          unless gates.any?{|g|g[0]==x && g[1]==y}
             objects[x][y] << Wall.new 
           end
         end
       end
 
-      place_plaza rng, objects, cx, cy, radius
-      place_huts rng, objects, cx, cy, radius
-      place_town_hall rng, objects, cx, cy, radius
+      plaza_loc = place_plaza rng, objects, cx, cy, radius
+
+      road_nodes = gates
+      road_nodes.concat place_huts(rng, objects, cx, cy, radius)
+      road_nodes << place_town_hall(rng, objects, cx, cy, radius)
 
       # place barracks
 
       # place roads
+      map = CityPlannerMap.new terrain, objects
+      pather = Polaris.new map
+
+      ordered_nodes = road_nodes.compact.sort_by{|n|n[3]}.reverse
+      first = ordered_nodes.first
+      rest = ordered_nodes[1..-1]
+      rest.each do |node|
+        path = pather.guide(first, node,nil,radius*radius*radius)
+        pave_path(objects, path) if path
+      end
+
+
         # buildings need to be tracked to have cx,cy,traffic
         # bring in A*
         # from highest traffic to lowest
@@ -256,15 +217,26 @@ class World
     end
   end
 
+  def pave_path(objects, path)
+    path.each do |path_el|
+      cell = path_el.location
+      objects[cell.x][cell.y] ||= []
+      objects[cell.x][cell.y] << Road.new unless objects[cell.x][cell.y].any?{|o|o.is_a? Road}
+    end
+  end
+
   def place_town_hall(rng, objects, cx, cy, radius)
     try_count = 0
-    town_hall_placed = false
-    until town_hall_placed || try_count > RETRY_MAX
+    th = false
+    until th || try_count > RETRY_MAX
       hut_w = rng.rand(3..6)
       hut_h = rng.rand(3..6)
-      town_hall_placed = place_building(rng, objects, cx, cy, radius, hut_w, hut_h)
+      th_cx = cx+rng.rand(-6..6)
+      th_cy = cy+rng.rand(-6..6)
+      th = place_building(rng, objects, cx, cy, radius, hut_w, hut_h)
       try_count += 1
     end
+    th
   end
 
   def place_plaza(rng, objects, cx, cy, radius)
@@ -280,22 +252,22 @@ class World
         objects[x][y] << Road.new
       end
     end
-
+    [plaza_cx, plaza_cy]
   end
 
   RETRY_MAX = 14
   def place_huts(rng, objects, cx, cy, radius)
     num_huts = rng.rand(1..radius/3)
-    hut_count = 0
+    huts = []
     retry_count = 0
-    while hut_count < num_huts && retry_count < RETRY_MAX
+    while huts.size < num_huts && retry_count < RETRY_MAX
       retry_count += 1
       hut_w = rng.rand(1..2)
       hut_h = rng.rand(1..2)
-      if place_building rng, objects, cx, cy, radius, hut_w, hut_h
-        hut_count += 1
-      end
+      hut = place_building rng, objects, cx, cy, radius, hut_w, hut_h
+      huts << hut if hut
     end
+    huts
   end
 
   def place_building(rng, objects, cx, cy, radius, hut_w, hut_h)
@@ -330,7 +302,7 @@ class World
         end
       end
     end
-    hut_fits
+    hut_fits ? [hut_cx, hut_cy, hut_w*hut_h] : nil
   end
 
   def room_for_building?(objects, x, y, w, h)
@@ -346,8 +318,8 @@ end
 
 class MyGame < Gosu::Window
   def initialize(seed)
-    @width = 800
-    @height = 608
+    @width = 1400
+    @height = 800
     super @width, @height, false
     Gosu.enable_undocumented_retrofication
 
@@ -422,7 +394,8 @@ class MyGame < Gosu::Window
   end
 
   def move_player
-    speed = 15
+    speed = 10
+    speed = 20 if button_down?(KbLeftShift) || button_down?(KbRightShift)
     @player.x -= speed if button_down?(KbA) && player_can_move?(-speed,0)
     @player.x += speed if button_down?(KbD) && player_can_move?(speed,0)
     @player.y -= speed if button_down?(KbW) && player_can_move?(0,-speed)
