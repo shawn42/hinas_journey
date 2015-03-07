@@ -163,8 +163,8 @@ class World
     largest_safe_radius = largest_flat_space(terrain, x:cx, y:cy, max:20)
     # puts "generating town! safe radius: #{largest_safe_radius}"
 
-    if largest_safe_radius > 10
-      radius = rng.rand(10..largest_safe_radius)
+    if largest_safe_radius > 9
+      radius = rng.rand(9..largest_safe_radius)
       puts "generating town with radius of #{radius} at [#{chunk_x}, #{chunk_y}]!"
       
       # pick gates
@@ -192,8 +192,9 @@ class World
       plaza_loc = place_plaza rng, objects, cx, cy, radius
 
       road_nodes = gates
-      road_nodes.concat place_huts(rng, objects, cx, cy, radius)
+      road_nodes << plaza_loc
       road_nodes << place_town_hall(rng, objects, cx, cy, radius)
+      road_nodes.concat place_huts(rng, objects, cx, cy, radius)
 
       # place barracks
 
