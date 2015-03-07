@@ -388,6 +388,12 @@ class MyGame < Gosu::Window
     destroy_old_chunks chunk_x, chunk_y
     move_player
     update_camera
+    update_clock
+  end
+
+  DAY_LENGHT_IN_MS = 60_000
+  def update_clock
+    @time_of_day = Gosu::milliseconds % DAY_LENGHT_IN_MS
   end
 
   def update_camera
@@ -519,6 +525,28 @@ class MyGame < Gosu::Window
       #           x, y+1, c, z = 2)
       @hero.draw_rot(@player.x,@player.y,2,0)
     end
+
+    # draw daylight
+    time = @time_of_day.to_f / DAY_LENGHT_IN_MS
+    alpha = 0
+    if time < 0.2 || time > 0.8
+      # night time
+      alpha = 200
+    elsif time >= 0.2 && time < 0.3
+      # sunrise
+      alpha = 200 - 200*((time-0.2)/0.1)
+    elsif time > 0.7 && time <= 0.8
+      # sunset
+      alpha = 200*((time-0.7)/0.1)
+    end
+
+
+    c = Color.rgba 0, 0, 20, alpha
+    draw_quad(0, 0, c,
+              @width, 0, c, 
+              @width, @height, c, 
+              0, @height, c, 99)
+
 
     @font.draw "#{@world.chunk_for_world_coord(@player.x, @player.y)}", 10, 10, 99
   end
