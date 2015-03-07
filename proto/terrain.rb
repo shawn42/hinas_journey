@@ -99,7 +99,7 @@ class World
     sea_level = -0.3
     grass_height = 0.2
     mountain_height = 1.5
-    snow_height = 2
+    snow_height = 2.2
 
     width.times do |x|
       height.times do |y|
@@ -354,7 +354,8 @@ class MyGame < Gosu::Window
       sand:          @env_tiles[16*11+13],
       grass:         @env_tiles[16*7 +1],
       mountain:      @env_tiles[16*6 +0],
-      snow:          @env_tiles[16*7 +0],
+      snow:          @env_tiles[16*13+14],
+      tree:          @env_tiles[16*4 +9]
     }
 
     generate_world seed
@@ -489,12 +490,16 @@ class MyGame < Gosu::Window
                 if objects
                   objects.each.with_index do |obj, i|
                   
-                    c = obj.color
-                    size = 31-i
-                    draw_quad(x+i+1, y+i+1, c, 
-                              x+size, y+i+1, c, 
-                              x+size, y+size, c, 
-                              x+i+1, y+size, c, obj.z)
+                    if obj.is_a? Tree
+                      @typed_tiles[:tree].draw(x+2,y-8,2)
+                    else
+                      c = obj.color
+                      size = 31-i
+                      draw_quad(x+i+1, y+i+1, c, 
+                                x+size, y+i+1, c, 
+                                x+size, y+size, c, 
+                                x+i+1, y+size, c, obj.z)
+                    end
                   end
                 end
 
