@@ -243,8 +243,8 @@ class World
   def place_plaza(rng, objects, cx, cy, radius)
     plaza_cx = cx + rng.rand(-5..5)
     plaza_cy = cy + rng.rand(-5..5)
-    plaza_w = rng.rand(radius/5..radius/2)
-    plaza_h = rng.rand(radius/5..radius/2)
+    plaza_w = rng.rand(radius/4..radius/2)
+    plaza_h = rng.rand(radius/4..radius/2)
     plaza_x = plaza_cx-plaza_w/2
     plaza_y = plaza_cy-plaza_h/2
     (plaza_x..plaza_x+plaza_w).each do |x|
@@ -280,8 +280,8 @@ class World
     hut_y = hut_cy-hut_h
     hut_fits = room_for_building?(objects, hut_cx-hut_w, hut_cy-hut_h, hut_w*2+1, hut_h*2+1)
 
+    doors = [[hut_cx,hut_cy-hut_h]] 
     if hut_fits
-      doors = [[hut_cx,hut_cy-hut_h]] 
       (hut_cx-hut_w..hut_cx+hut_w).each do |x|
         [hut_cy-hut_h,hut_cy+hut_h].each do |y|
           objects[x][y] ||= []
@@ -303,7 +303,7 @@ class World
         end
       end
     end
-    hut_fits ? [hut_cx, hut_cy, hut_w*hut_h] : nil
+    hut_fits ? doors[0] + [hut_w*hut_h] : nil
   end
 
   def room_for_building?(objects, x, y, w, h)
