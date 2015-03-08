@@ -570,7 +570,7 @@ class MyGame < Gosu::Window
     end
 
     if alpha > 1
-      @light_buffer.draw 0, 0, 0, mode: :multiply
+      @light_buffer.draw 0, 0, 98, mode: :multiply
     end
 
     @font.draw "#{@world.chunk_for_world_coord(@player.x, @player.y)}", 10, 10, 99
