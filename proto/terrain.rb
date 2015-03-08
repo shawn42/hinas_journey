@@ -1,7 +1,7 @@
 require 'perlin'
 require 'gosu'
 require 'polaris'
-# require 'ashton'
+require 'ashton'
 require_relative 'things'
 require_relative 'city_planner_map'
 
@@ -358,6 +358,8 @@ class MyGame < Gosu::Window
     @font = Font.new self, "Arial", 30
     @env_tiles = Image.load_tiles(self, "environment.png", 32, 32, true)
     @hero_tiles = Image.load_tiles(self, "heroes.png", -16, -1, true)
+    @light_buffer = Ashton::WindowBuffer.new
+    @circle_of_light = Image.new self, 'light.png'
     @hero = @hero_tiles.first
     @typed_tiles = {
       water:         @env_tiles[16 * 11 + 12],
@@ -480,6 +482,19 @@ class MyGame < Gosu::Window
   end
 
   def draw
+#     @light_buffer.render do
+#       c = Color::BLACK
+#       # draw_quad(0, 0, c, 
+#       #           @width, 0, c, 
+#       #           @width, @height, c, 
+#       #           0, @height, c, 0)
+#       @light_sources = [@camera]
+#       @light_sources.each do |light|
+#         # Use Gosu::Image#draw additively, so that lights make each other
+#         # lighter when they blend.
+#         # @circle_of_light.draw light.x, light.y, 0, 1, 1, 0xffffff, :add 
+#       end
+#     end
     trans_x = (@camera.x - @width / 2)
     trans_y = (@camera.y - @height / 2)
     translate(-trans_x, -trans_y) do
@@ -529,13 +544,6 @@ class MyGame < Gosu::Window
           end
         end
       end
-      # x = @camera.x
-      # y = @camera.y
-      # c = @camera_color
-      # draw_quad(x, y, c,
-      #           x+1, y, c, 
-      #           x+1, y+1, c, 
-      #           x, y+1, c, z = 2)
       @hero.draw_rot(@player.x,@player.y,2,0)
 
       # @light_buffer.draw -@width/2, -@height/2, 3, mode: :multiply
