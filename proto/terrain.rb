@@ -482,21 +482,44 @@ class MyGame < Gosu::Window
   end
 
   def draw
-#     @light_buffer.render do
-#       c = Color::BLACK
-#       # draw_quad(0, 0, c, 
-#       #           @width, 0, c, 
-#       #           @width, @height, c, 
-#       #           0, @height, c, 0)
-#       @light_sources = [@camera]
-#       @light_sources.each do |light|
-#         # Use Gosu::Image#draw additively, so that lights make each other
-#         # lighter when they blend.
-#         # @circle_of_light.draw light.x, light.y, 0, 1, 1, 0xffffff, :add 
-#       end
-#     end
     trans_x = (@camera.x - @width / 2)
     trans_y = (@camera.y - @height / 2)
+
+    # draw daylight
+    time = @time_of_day.to_f / DAY_LENGHT_IN_MS
+    alpha = 0
+    if time < 0.2 || time > 0.8
+      # night time
+      alpha = 200
+    elsif time >= 0.2 && time < 0.3
+      # sunrise
+      alpha = 200 - 200*((time-0.2)/0.1)
+    elsif time > 0.7 && time <= 0.8
+      # sunset
+      alpha = 200*((time-0.7)/0.1)
+    end
+
+    if alpha > 1
+      bc = Color.rgba 255 - alpha, 255 - alpha, 255 - alpha, 255
+      c = Color.rgba 255, 255, 255, alpha
+     
+      @light_buffer.render do |buffer|
+        buffer.clear color: bc
+
+        torch1 = Torch.new @camera.x + 150, @camera.y + 150
+        torch2 = Torch.new @camera.x - 300, @camera.y + 200
+
+        @light_sources = [@camera, torch1, torch2]
+
+        @light_sources.each do |light|
+          # Use Gosu::Image#draw additively, so that lights make each other
+          # lighter when they blend.
+          @circle_of_light.draw_rot light.x - trans_x, light.y - trans_y, 0, 0, 0.5, 0.5,
+                                    light.light_diameter, light.light_diameter, light.light_color, :add
+        end
+      end
+    end
+
     translate(-trans_x, -trans_y) do
       cam_chunk_x = @camera.x / (@world.chunk_size * CELL_SIZE)
       cam_chunk_y = @camera.y / (@world.chunk_size * CELL_SIZE)
@@ -545,30 +568,10 @@ class MyGame < Gosu::Window
         end
       end
       @hero.draw_rot(@player.x,@player.y,2,0)
-
-      # @light_buffer.draw -@width/2, -@height/2, 3, mode: :multiply
-    end
-
-    # draw daylight
-    time = @time_of_day.to_f / DAY_LENGHT_IN_MS
-    alpha = 0
-    if time < 0.2 || time > 0.8
-      # night time
-      alpha = 200
-    elsif time >= 0.2 && time < 0.3
-      # sunrise
-      alpha = 200 - 200*((time-0.2)/0.1)
-    elsif time > 0.7 && time <= 0.8
-      # sunset
-      alpha = 200*((time-0.7)/0.1)
     end
 
     if alpha > 1
-      c = Color.rgba 0, 0, 20, alpha
-      draw_quad(0, 0, c,
-                @width, 0, c, 
-                @width, @height, c, 
-                0, @height, c, 99)
+      @light_buffer.draw 0, 0, 0, mode: :multiply
     end
 
     @font.draw "#{@world.chunk_for_world_coord(@player.x, @player.y)}", 10, 10, 99
