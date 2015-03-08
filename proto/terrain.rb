@@ -373,6 +373,8 @@ class MyGame < Gosu::Window
     }
     generate_world seed
 
+    @light_sources = [@camera]
+
     update
     until player_position_valid?
       @player.x += CELL_SIZE
@@ -506,11 +508,6 @@ class MyGame < Gosu::Window
       @light_buffer.render do |buffer|
         buffer.clear color: bc
 
-        torch1 = Torch.new @camera.x + 150, @camera.y + 150
-        torch2 = Torch.new @camera.x - 300, @camera.y + 200
-
-        @light_sources = [@camera, torch1, torch2]
-
         @light_sources.each do |light|
           # Use Gosu::Image#draw additively, so that lights make each other
           # lighter when they blend.
@@ -596,6 +593,9 @@ class MyGame < Gosu::Window
     elsif id == KbDown
       @world.persistence -= 0.25
       regenerate_world
+    elsif id == KbT
+      torch = Torch.new @camera.x, @camera.y
+      @light_sources << torch
     elsif id == KbSpace
       generate_world (rand*100_000).round
 
