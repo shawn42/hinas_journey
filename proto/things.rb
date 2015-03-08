@@ -12,7 +12,7 @@ class Camera
     @x = x
     @y = y
     @light_diameter = 4.0
-    @light_color = 0xFFFFFFFF
+    @light_color = Color.rgb(255, 255, 255)
   end
 end
 
@@ -23,7 +23,7 @@ class Torch
     @x = x
     @y = y
     @light_diameter = 2.0
-    @light_color = 0xFFFFFFAA
+    @light_color = Color.rgb(255, 255, 160)
   end
 end
 

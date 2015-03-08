@@ -511,8 +511,10 @@ class MyGame < Gosu::Window
         @light_sources.each do |light|
           # Use Gosu::Image#draw additively, so that lights make each other
           # lighter when they blend.
+          light_color = light.light_color.dup
+          light_color.alpha = alpha
           @circle_of_light.draw_rot light.x - trans_x, light.y - trans_y, 0, 0, 0.5, 0.5,
-                                    light.light_diameter, light.light_diameter, light.light_color, :add
+                                    light.light_diameter, light.light_diameter, light_color, :add
         end
       end
     end
