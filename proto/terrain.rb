@@ -1,6 +1,7 @@
 require 'perlin'
 require 'gosu'
 require 'polaris'
+# require 'ashton'
 require_relative 'things'
 require_relative 'city_planner_map'
 
@@ -112,7 +113,6 @@ class World
         elsif sample > grass_height
           type = :grass
           if rng.rand < 0.01
-            # puts "TREE AT: #{chunk_x*chunk_size*CELL_SIZE+x},#{chunk_y*chunk_size*CELL_SIZE+y}"
             chunk_objects[x][y] ||= []
             chunk_objects[x][y] << Tree.new
           end
@@ -127,10 +127,23 @@ class World
       end
     end
 
-    # 20% chance to spawn town
-    # if(rng.rand(100) < 20)
-      generate_town(rng, chunk_terrain, chunk_objects, chunk_x, chunk_y)
-    # end
+      if generate_town(rng, chunk_terrain, chunk_objects, chunk_x, chunk_y)
+      else
+        if(rng.rand(100) < 20)
+          generate_cave(rng, chunk_terrain, chunk_objects, chunk_x, chunk_y)
+        end
+      end
+  end
+
+  def generate_cave(rng, chunk_terrain, chunk_objects, chunk_x, chunk_y)
+    chunk_size = chunk_terrain.size
+    entrance_x = rng.rand(0..chunk_size)
+    entrance_y = rng.rand(0..chunk_size)
+
+    puts "generating cave at [#{entrance_x},#{entrance_y}] [#{chunk_x}, #{chunk_y}]!"
+    chunk_objects[entrance_x][entrance_y] ||= []
+    chunk_objects[entrance_x][entrance_y] << CaveEntrance.new
+
   end
 
   def largest_flat_space(terrain, opts)
@@ -203,18 +216,13 @@ class World
       pather = Polaris.new map
 
       ordered_nodes = road_nodes.compact.sort_by{|n|n[3]}.reverse
-      first = ordered_nodes.first
-      rest = ordered_nodes[1..-1]
-      rest.each do |node|
-        path = pather.guide(first, node,nil,radius*radius*radius)
+      ordered_nodes.each_cons(2) do |a,b|
+        path = pather.guide(a, b)
         pave_path(objects, path) if path
       end
-
-
-        # buildings need to be tracked to have cx,cy,traffic
-        # bring in A*
-        # from highest traffic to lowest
-          # A* from building to all other lower buildings, roads have a cost of zero
+      true
+    else
+      false
     end
   end
 
@@ -272,15 +280,17 @@ class World
   end
 
   def place_building(rng, objects, cx, cy, radius, hut_w, hut_h)
-    # TODO track buildings for population values / doors
-
     hut_cx = rng.rand(cx-radius+2+hut_w..cx+radius-2-hut_w)
     hut_cy = rng.rand(cy-radius+2+hut_h..cy+radius-2-hut_h)
     hut_x = hut_cx-hut_w
     hut_y = hut_cy-hut_h
     hut_fits = room_for_building?(objects, hut_cx-hut_w, hut_cy-hut_h, hut_w*2+1, hut_h*2+1)
 
-    doors = [[hut_cx,hut_cy-hut_h]] 
+    all_doors = [[hut_cx,hut_cy-hut_h],[hut_cx,hut_cy+hut_h],[hut_cx-hut_w,hut_cy],[hut_cx+hut_w,hut_cy]] 
+    
+    doors = all_doors.select{|d|rng.rand(10) < 2}
+    doors = [all_doors[rand(all_doors.size)]] if doors.empty?
+
     if hut_fits
       (hut_cx-hut_w..hut_cx+hut_w).each do |x|
         [hut_cy-hut_h,hut_cy+hut_h].each do |y|
@@ -350,15 +360,15 @@ class MyGame < Gosu::Window
     @hero_tiles = Image.load_tiles(self, "heroes.png", -16, -1, true)
     @hero = @hero_tiles.first
     @typed_tiles = {
-      water:         @env_tiles[16*11+12],
-      shallow_water: @env_tiles[16*7 +3],
-      sand:          @env_tiles[16*11+13],
-      grass:         @env_tiles[16*7 +1],
-      mountain:      @env_tiles[16*6 +0],
-      snow:          @env_tiles[16*13+14],
-      tree:          @env_tiles[16*4 +9]
+      water:         @env_tiles[16 * 11 + 12],
+      shallow_water: @env_tiles[16 *  7 + 3],
+      sand:          @env_tiles[16 * 11 + 13],
+      grass:         @env_tiles[16 *  7 + 1],
+      mountain:      @env_tiles[16 *  6 + 0],
+      snow:          @env_tiles[16 * 13 + 14],
+      tree:          @env_tiles[16 *  4 + 9],
+      cave_entrance: @env_tiles[16 *  7 + 12]
     }
-
     generate_world seed
 
     update
@@ -393,7 +403,8 @@ class MyGame < Gosu::Window
 
   DAY_LENGHT_IN_MS = 60_000
   def update_clock
-    @time_of_day = Gosu::milliseconds % DAY_LENGHT_IN_MS
+    # start at mid-day
+    @time_of_day = (Gosu::milliseconds+DAY_LENGHT_IN_MS/2) % DAY_LENGHT_IN_MS
   end
 
   def update_camera
@@ -410,9 +421,7 @@ class MyGame < Gosu::Window
     @player.y += speed if button_down?(KbS) && player_can_move?(0,speed)
   end
 
-  BLOCK_TILES = [:water, :mountain, :snow]
   def player_can_move?(x_delta, y_delta)
-    # return true if BLOCK_TILES.include?(@world.tile_for_world_coord(@player.x,@player.y))
     if x_delta < 0
       passable?(@player.x-8+x_delta,@player.y-8) &&
         passable?(@player.x-8+x_delta,@player.y+8)
@@ -430,6 +439,7 @@ class MyGame < Gosu::Window
     end
   end
 
+  BLOCK_TILES = [:water, :mountain, :snow]
   def passable?(x, y)
     objects = @world.objects_for_world_coord(x,y)
     !BLOCK_TILES.include?(@world.tile_for_world_coord(x, y)) && (objects.nil? || objects.all?(&:passable))
@@ -472,12 +482,13 @@ class MyGame < Gosu::Window
   def draw
     trans_x = (@camera.x - @width / 2)
     trans_y = (@camera.y - @height / 2)
-
     translate(-trans_x, -trans_y) do
       cam_chunk_x = @camera.x / (@world.chunk_size * CELL_SIZE)
       cam_chunk_y = @camera.y / (@world.chunk_size * CELL_SIZE)
 
-      (cam_chunk_x-1..cam_chunk_x+1).each do |chunk_x|
+      min_x = cam_chunk_x-1
+      max_x = cam_chunk_x+1
+      (min_x..max_x).each do |chunk_x|
         (cam_chunk_y-1..cam_chunk_y+1).each do |chunk_y|
 
           if @world.has_chunk? chunk_x, chunk_y
@@ -499,6 +510,8 @@ class MyGame < Gosu::Window
                   
                     if obj.is_a? Tree
                       @typed_tiles[:tree].draw(x+2,y-8,2)
+                    elsif obj.is_a? CaveEntrance
+                      @typed_tiles[:cave_entrance].draw(x-2,y-8,1)
                     else
                       c = obj.color
                       size = 31-i
@@ -524,6 +537,8 @@ class MyGame < Gosu::Window
       #           x+1, y+1, c, 
       #           x, y+1, c, z = 2)
       @hero.draw_rot(@player.x,@player.y,2,0)
+
+      # @light_buffer.draw -@width/2, -@height/2, 3, mode: :multiply
     end
 
     # draw daylight
@@ -540,13 +555,13 @@ class MyGame < Gosu::Window
       alpha = 200*((time-0.7)/0.1)
     end
 
-
-    c = Color.rgba 0, 0, 20, alpha
-    draw_quad(0, 0, c,
-              @width, 0, c, 
-              @width, @height, c, 
-              0, @height, c, 99)
-
+    if alpha > 1
+      c = Color.rgba 0, 0, 20, alpha
+      draw_quad(0, 0, c,
+                @width, 0, c, 
+                @width, @height, c, 
+                0, @height, c, 99)
+    end
 
     @font.draw "#{@world.chunk_for_world_coord(@player.x, @player.y)}", 10, 10, 99
   end

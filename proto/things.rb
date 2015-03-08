@@ -28,6 +28,14 @@ class Tree
   end
 end
 
+class CaveEntrance
+  def passable;true;end
+  def z;3;end
+  def color
+    @color ||= Color.rgba 20, 20, 20, 200
+  end
+end
+
 class Wall
   def passable;false;end
   def z;3;end
