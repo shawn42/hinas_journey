@@ -502,8 +502,8 @@ class MyGame < Gosu::Window
     end
 
     if alpha > 1
-      bc = Color.rgba 255 - alpha, 255 - alpha, 255 - alpha, 255
-      c = Color.rgba 255, 255, 255, alpha
+      brightness = 255 - alpha
+      bc = Color.rgba brightness, brightness, brightness, 255
      
       @light_buffer.render do |buffer|
         buffer.clear color: bc
