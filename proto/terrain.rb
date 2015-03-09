@@ -111,7 +111,7 @@ class World
     # puts "[#{chunk_x},#{chunk_y}] => noise row size: #{noise.size}x#{noise.first.size} vs chunksize: #{chunk_size}"
     deep_sea_level = -0.7
     sea_level = -0.3
-    grass_height = 0.2
+    grass_height = -0.1
     mountain_height = 1.5
     snow_height = 2.2
 
