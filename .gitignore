@@ -11,3 +11,6 @@ ctags
 *.lock
 vendor
 image.info
+
+cache
+.ruby-version

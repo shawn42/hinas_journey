@@ -6,9 +6,24 @@ end
 
 class Camera
   attr_accessor :x, :y
+  attr_accessor :light_diameter, :light_color
+
   def initialize(x,y)
     @x = x
     @y = y
+    @light_diameter = 4.0
+    @light_color = Color.rgb(255, 255, 255)
+  end
+end
+
+class Torch
+  attr_accessor :x, :y
+  attr_accessor :light_diameter, :light_color
+  def initialize(x,y)
+    @x = x
+    @y = y
+    @light_diameter = 2.0
+    @light_color = Color.rgb(255, 255, 160)
   end
 end
 
