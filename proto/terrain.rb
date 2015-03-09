@@ -358,7 +358,6 @@ class MyGame < Gosu::Window
     @font = Font.new self, "Arial", 30
     @env_tiles = Image.load_tiles(self, "environment.png", 32, 32, true)
     @hero_tiles = Image.load_tiles(self, "heroes.png", -16, -1, true)
-    @light_buffer = Ashton::WindowBuffer.new
     @circle_of_light = Image.new self, 'light.png'
     @hero = @hero_tiles.first
     @typed_tiles = {
@@ -373,13 +372,38 @@ class MyGame < Gosu::Window
     }
     generate_world seed
 
+    # On retina, double these sizes...
+    @light_buffer = Ashton::Texture.new width, height
+    @back_buffer = Ashton::Texture.new width, height
+
     @light_sources = [@camera]
+    create_lighting_shader
 
     update
     until player_position_valid?
       @player.x += CELL_SIZE
       update
     end
+  end
+
+  def create_lighting_shader
+    shader = <<END_SHADER
+#version 110
+
+uniform sampler2D in_Texture0;
+uniform sampler2D in_Texture1;
+
+varying vec2 var_TexCoord0;
+varying vec2 var_TexCoord1;
+
+void main()
+{
+  gl_FragColor.rgb = texture2D(in_Texture0, var_TexCoord0).rgb * texture2D(in_Texture1, var_TexCoord1).rgb;
+  gl_FragColor.a = 1.0;
+}
+END_SHADER
+
+    @lighting_shader = Ashton::Shader.new vertex: :multitexture2, fragment: shader
   end
 
   def player_position_valid?
@@ -489,22 +513,23 @@ class MyGame < Gosu::Window
 
     # draw daylight
     time = @time_of_day.to_f / DAY_LENGHT_IN_MS
-    alpha = 0
+    darkness = 0
     if time < 0.2 || time > 0.8
       # night time
-      alpha = 200
+      darkness = 200
     elsif time >= 0.2 && time < 0.3
       # sunrise
-      alpha = 200 - 200*((time-0.2)/0.1)
+      darkness = (200 - 200*((time-0.2)/0.1)).round
     elsif time > 0.7 && time <= 0.8
       # sunset
-      alpha = 200*((time-0.7)/0.1)
+      darkness = (200*((time-0.7)/0.1)).round
     end
 
-    if alpha > 1
-      brightness = 255 - alpha
+    if darkness > 0
+      brightness = 255 - darkness
+      
       bc = Color.rgba brightness, brightness, brightness, 255
-     
+
       @light_buffer.render do |buffer|
         buffer.clear color: bc
 
@@ -512,13 +537,26 @@ class MyGame < Gosu::Window
           # Use Gosu::Image#draw additively, so that lights make each other
           # lighter when they blend.
           light_color = light.light_color.dup
-          light_color.alpha = alpha
+          #light_color.alpha = darkness
           @circle_of_light.draw_rot light.x - trans_x, light.y - trans_y, 0, 0, 0.5, 0.5,
                                     light.light_diameter, light.light_diameter, light_color, :add
         end
       end
+
+      @back_buffer.render do |buffer|
+        buffer.clear
+        draw_stuff trans_x, trans_y
+      end
+
+      @back_buffer.draw 0, 0, 0, multitexture: @light_buffer, shader: @lighting_shader
+    else
+      draw_stuff trans_x, trans_y
     end
 
+    @font.draw "#{@world.chunk_for_world_coord(@player.x, @player.y)}", 10, 10, 99
+  end
+
+  def draw_stuff(trans_x, trans_y)
     translate(-trans_x, -trans_y) do
       cam_chunk_x = @camera.x / (@world.chunk_size * CELL_SIZE)
       cam_chunk_y = @camera.y / (@world.chunk_size * CELL_SIZE)
@@ -568,12 +606,6 @@ class MyGame < Gosu::Window
       end
       @hero.draw_rot(@player.x,@player.y,2,0)
     end
-
-    if alpha > 1
-      @light_buffer.draw 0, 0, 98, mode: :multiply
-    end
-
-    @font.draw "#{@world.chunk_for_world_coord(@player.x, @player.y)}", 10, 10, 99
   end
 
   def lookup_color(terrain_type)
