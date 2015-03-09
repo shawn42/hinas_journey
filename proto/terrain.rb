@@ -7,6 +7,7 @@ require_relative 'city_planner_map'
 
 include Gosu
 CELL_SIZE = 32
+USE_RETINA = true
 
 require 'zlib'
 def crc32(*stuff)
@@ -64,6 +65,18 @@ class World
     chunk_x = x / CELL_SIZE / chunk_size
     chunk_y = y / CELL_SIZE / chunk_size
     [chunk_x, chunk_y]
+  end
+
+  def place_object(object, x, y)
+    chunk_x = x / CELL_SIZE / chunk_size
+    chunk_y = y / CELL_SIZE / chunk_size
+    chunk_size_in_pixels = CELL_SIZE * chunk_size
+    chunk_objs = @objects[chunk_x][chunk_y]
+
+    local_x = (x-chunk_x*chunk_size_in_pixels)/CELL_SIZE
+    local_y = (y-chunk_y*chunk_size_in_pixels)/CELL_SIZE
+    chunk_objs[local_x][local_y] ||= []
+    chunk_objs[local_x][local_y] << object
   end
 
   def objects_for_world_coord(x,y)
@@ -367,6 +380,7 @@ class MyGame < Gosu::Window
       grass:         @env_tiles[16 *  7 + 1],
       mountain:      @env_tiles[16 *  6 + 0],
       snow:          @env_tiles[16 * 13 + 14],
+      torch:         @env_tiles[16 * 13 + 15],
       tree:          @env_tiles[16 *  4 + 9],
       cave_entrance: @env_tiles[16 *  7 + 12]
     }
@@ -378,6 +392,7 @@ class MyGame < Gosu::Window
 
     @light_sources = [@camera]
     create_lighting_shader
+    @scale = USE_RETINA ? 0.5 : 1
 
     update
     until player_position_valid?
@@ -433,6 +448,7 @@ END_SHADER
   def update_clock
     # start at mid-day
     @time_of_day = (Gosu::milliseconds+DAY_LENGHT_IN_MS/2) % DAY_LENGHT_IN_MS
+    @time_of_day = (Gosu::milliseconds) % DAY_LENGHT_IN_MS
   end
 
   def update_camera
@@ -537,15 +553,18 @@ END_SHADER
           # Use Gosu::Image#draw additively, so that lights make each other
           # lighter when they blend.
           light_color = light.light_color.dup
-          #light_color.alpha = darkness
-          @circle_of_light.draw_rot light.x - trans_x, light.y - trans_y, 0, 0, 0.5, 0.5,
-                                    light.light_diameter, light.light_diameter, light_color, :add
+          light_color.alpha = darkness
+          flicker = light.is_a?(Torch) ? rand(1..1.02) : 1
+          @circle_of_light.draw_rot (light.x - trans_x)*@scale, (light.y - trans_y)*@scale, 0, 0, 0.5, 0.5,
+                                    light.light_diameter*@scale*flicker, light.light_diameter*@scale*flicker, light_color, :add
         end
       end
 
       @back_buffer.render do |buffer|
         buffer.clear
-        draw_stuff trans_x, trans_y
+        scale(@scale) do
+          draw_stuff trans_x, trans_y
+        end
       end
 
       @back_buffer.draw 0, 0, 0, multitexture: @light_buffer, shader: @lighting_shader
@@ -584,9 +603,11 @@ END_SHADER
                   objects.each.with_index do |obj, i|
                   
                     if obj.is_a? Tree
-                      @typed_tiles[:tree].draw(x+2,y-8,2)
+                      @typed_tiles[:tree].draw(x+2,y-8,obj.z)
                     elsif obj.is_a? CaveEntrance
-                      @typed_tiles[:cave_entrance].draw(x-2,y-8,1)
+                      @typed_tiles[:cave_entrance].draw(x-2,y-8,obj.z)
+                    elsif obj.is_a? Torch
+                      @typed_tiles[:torch].draw(obj.x, obj.y, obj.z)
                     else
                       c = obj.color
                       size = 31-i
@@ -629,6 +650,8 @@ END_SHADER
       regenerate_world
     elsif id == KbT
       torch = Torch.new @camera.x, @camera.y
+      @world.place_object(torch, @camera.x, @camera.y)
+
       @light_sources << torch
     elsif id == KbSpace
       generate_world (rand*100_000).round

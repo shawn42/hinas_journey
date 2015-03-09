@@ -19,6 +19,8 @@ end
 class Torch
   attr_accessor :x, :y
   attr_accessor :light_diameter, :light_color
+  def passable;true;end
+  def z;1;end
   def initialize(x,y)
     @x = x
     @y = y
